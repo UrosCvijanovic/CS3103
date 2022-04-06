@@ -25,7 +25,8 @@ int main() {
     block_size = filesize/n_threads;
     for(int i = 0; i < n_threads; i++){
         int start_offset = filesize*(((float) i)/n_threads);
-        pthread_create(pthreads[i], NULL, search_start, &start_offset);
+        // need to make smaller files first
+        pthread_create(pthreads[i], NULL, search_start, //here we need to add segment, i guess...);
     }
 
 
