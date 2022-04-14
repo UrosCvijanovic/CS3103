@@ -3,13 +3,33 @@
 #include <stdbool.h>
 #include <string.h>
 #include <pthread.h>
+#include <time.h>
 #include <sys/stat.h>
 
 #define NO_OF_THREAD 4
-#define HASH_TABLE_SIZE 100
+#define HASH_TABLE_SIZE 1000
 
-//*Hash Table implementation using seperate chaining*
-//Note: It hasn't been tested yet.
+// Compare if the value of key-value pair a is smaller than b
+bool smallerThan(key_value *a, key_value *b)
+{
+    if (a->count < b->count)
+    {
+        return true;
+    }
+    else if (a->count == b->count && a->timestamp < b->timestamp)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+/*
+<Hash Table implementation using seperate chaining>
+Reference: https://pages.cs.wisc.edu/~remzi/OSTEP/threads-locks-usage.pdf (Operating Systems: Three Easy Pieces)
+*/
 
 // A node containing timestamp and no. of occurance
 typedef struct key_value
@@ -26,6 +46,7 @@ typedef struct list_header
     pthread_mutex_t lock;
 } list_header;
 
+// Hash table for global access
 static list_header hasht[HASH_TABLE_SIZE];
 
 // Initialize the hash table
@@ -38,21 +59,28 @@ void initHashTable()
     }
 }
 
+// Function that return the hash index
+long getHashIdx(long key)
+{
+    return (key / 100) % HASH_TABLE_SIZE;
+}
+
 // Insert a record to the hash table
 void *insert(long key)
 {
-    pthread_mutex_lock(&hasht[key % HASH_TABLE_SIZE].lock);
-    if (hasht[key % HASH_TABLE_SIZE].front == NULL)
+    long hashKey = getHashIdx(key);
+    pthread_mutex_lock(&hasht[hashKey].lock);
+    if (hasht[hashKey].front == NULL)
     {
         key_value *newEntry = (struct key_value *)malloc(sizeof(key_value));
         newEntry->timestamp = key;
         newEntry->count = 1;
-        hasht[key % HASH_TABLE_SIZE].front = newEntry;
+        hasht[hashKey].front = newEntry;
     }
     else
     {
         bool found = false;
-        key_value *pointer = hasht[key % HASH_TABLE_SIZE].front;
+        key_value *pointer = hasht[hashKey].front;
         while (pointer != NULL)
         {
             if (pointer->timestamp == key)
@@ -71,11 +99,122 @@ void *insert(long key)
             key_value *newEntry = (struct key_value *)malloc(sizeof(key_value));
             newEntry->timestamp = key;
             newEntry->count = 1;
-            newEntry->next = hasht[key % HASH_TABLE_SIZE].front;
-            hasht[key % HASH_TABLE_SIZE].front = newEntry;
+            newEntry->next = hasht[hashKey].front;
+            hasht[hashKey].front = newEntry;
         }
     }
-    pthread_mutex_unlock(&hasht[key % HASH_TABLE_SIZE].lock);
+    pthread_mutex_unlock(&hasht[hashKey].lock);
+}
+
+/*
+<Heap & heap sort implementation>
+Reference: https://www.geeksforgeeks.org/insertion-and-deletion-in-heaps/ (GeeksforGeeks)
+*/
+
+static key_value **heap;
+static int k;
+static int heap_size;
+
+// Initialize the Heap
+void initHeap()
+{
+    heap = (key_value **)malloc(k * sizeof(struct key_value *));
+    heap_size = 0;
+}
+
+// Function for basic Heap insertion operation
+void heapInsert(key_value *node)
+{
+    key_value *temp;
+    heap[heap_size] = node;
+    int i = heap_size;
+    while (smallerThan(heap[i], heap[(i - 1) / 2]) && i != 0)
+    {
+        temp = heap[i];
+        heap[i] = heap[(i - 1) / 2];
+        heap[(i - 1) / 2] = temp;
+    }
+    heap_size++;
+}
+
+// heapify function for Heap
+void heapify(int i)
+{
+    int min = i;
+    key_value *temp;
+    if (2 * i + 1 < heap_size && smallerThan(heap[2 * i + 1], heap[min]))
+    {
+        min = 2 * i + 1;
+    }
+    else if (2 * i + 2 < heap_size && smallerThan(heap[2 * i + 2], heap[min]))
+    {
+        min = 2 * i + 2;
+    }
+    if (min != i)
+    {
+        temp = heap[i];
+        heap[i] = heap[min];
+        heap[min] = temp;
+        heapify(min);
+    }
+}
+
+// Traversing the whole hash table and print its entries (has no use for the acutal project)
+void traverse_hash_table()
+{
+    key_value *pointer = NULL;
+    for (int i = 0; i < HASH_TABLE_SIZE; i++)
+    {
+        printf("Index [%d]:", i);
+        if (hasht[i].front != NULL)
+        {
+            pointer = hasht[i].front;
+            do
+            {
+                // Do something with the record
+                printf("<%ld, freq: %ld> ", pointer->timestamp, pointer->count);
+
+                pointer = pointer->next;
+            } while (pointer != NULL);
+        }
+        else
+        {
+            printf("No record");
+        }
+        printf("\n");
+    }
+}
+
+// Put Record Into the Heap
+// Reference: https://www.geeksforgeeks.org/k-largestor-smallest-elements-in-an-array/ (GeeksforGeeks)
+void readRecordNPut()
+{
+    key_value *pointer = NULL;
+    for (int i = 0; i < HASH_TABLE_SIZE; i++)
+    {
+        if (hasht[i].front != NULL)
+        {
+            pointer = hasht[i].front;
+            do
+            {
+
+                if (heap_size < k)
+                {
+                    heapInsert(pointer);
+                }
+                else
+                {
+                    if (smallerThan(heap[0], pointer))
+                    {
+                        heap[0] = pointer;
+                        heapify(0);
+                    }
+                }
+
+                pointer = pointer->next;
+            } while (pointer != NULL);
+        }
+    }
 }
 
 // Function that round the timestamp to the nearest hour
@@ -85,81 +224,30 @@ long convertRecord(char *timestamp)
     return decimal - decimal % 3600;
 }
 
-//return the file size, adopted from the demo code
-long getLength(char *filePath)
-{
-    struct stat sb;
-    stat(filePath, &sb);
-    return sb.st_size;
-}
-
-// The argument list for individual thread
-typedef struct tArg
-{
-    FILE *input;
-    int start;
-    int end;
-} tArg;
-
-// Read a segment of the file, then add it to the hash table
-//Note: this code doesn't work yet
-
-void *readAndProcess(void *args)
-{
-    tArg *arg = (tArg *)args;
-    char timestamp[4096];
-    fseek(arg->input, arg->start, SEEK_SET);
-    int read = fread(timestamp, 1, 4096, arg->input);
-    printf("%s\n",timestamp);
-    /*
-    while (read + arg->start < arg->end)
-    {
-        read += fread(timestamp, strlen(timestamp)+1, 1, arg->input);
-        printf(timestamp);
-    }
-    */
-}
-
-
-//Note: some code are "commented out" for testing purpose.
+// main function to test hash table & heap sort
 int main(int argc, char *argv[])
 {
-    if (argc < 3)
-    {
-        printf("Please provide at least 3 arguments \n");
-        // return 0;
-    }
     initHashTable();
-    char *dataFilePath;
-    // dataFilePath = argv[1];
-    dataFilePath = "test.txt";
-
-    FILE *data = fopen(dataFilePath, "r");
-    int topK;
-
-    // sscanf(argv[3], "%d", &topK);
-    topK = 5;
-
-    long fileLen = getLength(dataFilePath);
-    long sizeForThread = fileLen / NO_OF_THREAD;
-    pthread_t segmentReader[NO_OF_THREAD];
-    tArg argList[NO_OF_THREAD];
-
-    int fileStartPos = 0;
-    for (int i = 0; i < NO_OF_THREAD; i++)
+    char *filename[50];
+    printf("Input file: ");
+    scanf("%s", filename); // manually input the file path (textfile.txt)
+    FILE *input = fopen(filename, "r");
+    char *line[50];
+    while (fgets(line, 50, input))
     {
-        argList[i].input = fopen(dataFilePath, "r");
-        argList[i].start = fileStartPos;
-        argList[i].end = fileStartPos + sizeForThread;
-        fileStartPos += sizeForThread;
-        pthread_create(&segmentReader[i], NULL, readAndProcess, &argList[i]);
+        insert(convertRecord(line));
     }
-    for (int i = 0; i < NO_OF_THREAD; i++)
-    {
-        pthread_join(segmentReader[i], NULL);
-        fclose(argList[i].input);
-    }
+    int topk;
+    printf("Input value for K: ");
+    scanf("%d", &topk);
+    k = topk;
+    initHeap();
 
-    fclose(data);
-    return 0;
+    readRecordNPut();
+
+    // print heap content
+    for (int i = 0; i < heap_size; i++)
+    {
+        printf("[(%d) %ld : %ld]", i, heap[i]->timestamp, heap[i]->count);
+    }
 }
