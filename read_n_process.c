@@ -9,6 +9,19 @@
 #define NO_OF_THREAD 4
 #define HASH_TABLE_SIZE 1000
 
+/*
+<Hash Table implementation using seperate chaining>
+Reference: https://pages.cs.wisc.edu/~remzi/OSTEP/threads-locks-usage.pdf (Operating Systems: Three Easy Pieces)
+*/
+
+// A node containing timestamp and no. of occurance
+typedef struct key_value
+{
+    long timestamp;
+    long count;
+    struct key_value *next;
+} key_value;
+
 // Compare if the value of key-value pair a is smaller than b
 bool smallerThan(key_value *a, key_value *b)
 {
@@ -25,19 +38,6 @@ bool smallerThan(key_value *a, key_value *b)
         return false;
     }
 }
-
-/*
-<Hash Table implementation using seperate chaining>
-Reference: https://pages.cs.wisc.edu/~remzi/OSTEP/threads-locks-usage.pdf (Operating Systems: Three Easy Pieces)
-*/
-
-// A node containing timestamp and no. of occurance
-typedef struct key_value
-{
-    long timestamp;
-    long count;
-    struct key_value *next;
-} key_value;
 
 // A node as a header of each linked list, containing a lock
 typedef struct list_header
@@ -133,20 +133,24 @@ void heapInsert(key_value *node)
         temp = heap[i];
         heap[i] = heap[(i - 1) / 2];
         heap[(i - 1) / 2] = temp;
+        i = (i - 1) / 2;
     }
     heap_size++;
 }
 
 // heapify function for Heap
+// This code doesn't work properly yet. Possible reason: I took the implemntation
+// of Max heap and modify it, but it is not implemented correctly
+
 void heapify(int i)
 {
     int min = i;
     key_value *temp;
-    if (2 * i + 1 < heap_size && smallerThan(heap[2 * i + 1], heap[min]))
+    if (2 * i + 1 < heap_size && smallerThan(heap[2 * i + 1],heap[min]))
     {
         min = 2 * i + 1;
     }
-    else if (2 * i + 2 < heap_size && smallerThan(heap[2 * i + 2], heap[min]))
+    else if (2 * i + 2 < heap_size && smallerThan(heap[2 * i + 2],heap[min]))
     {
         min = 2 * i + 2;
     }
@@ -159,30 +163,19 @@ void heapify(int i)
     }
 }
 
-// Traversing the whole hash table and print its entries (has no use for the acutal project)
-void traverse_hash_table()
+void heapSortK()
 {
-    key_value *pointer = NULL;
-    for (int i = 0; i < HASH_TABLE_SIZE; i++)
+    key_value *root_val;
+    int init_size = heap_size;
+    for (int i = 0; i < init_size; i++)
     {
-        printf("Index [%d]:", i);
-        if (hasht[i].front != NULL)
-        {
-            pointer = hasht[i].front;
-            do
-            {
-                // Do something with the record
-                printf("<%ld, freq: %ld> ", pointer->timestamp, pointer->count);
-
-                pointer = pointer->next;
-            } while (pointer != NULL);
-        }
-        else
-        {
-            printf("No record");
-        }
-        printf("\n");
+        root_val = heap[0];
+        heap[0] = heap[init_size - i - 1];
+        heap_size--;
+        heapify(0);
+        heap[init_size - i - 1] = root_val;
     }
+    heap_size = init_size;
 }
 
 // Put Record Into the Heap
@@ -229,25 +222,31 @@ int main(int argc, char *argv[])
 {
     initHashTable();
     char *filename[50];
+    int topk;
     printf("Input file: ");
     scanf("%s", filename); // manually input the file path (textfile.txt)
     FILE *input = fopen(filename, "r");
+
+    printf("Input value for K: ");
+    scanf("%d", &topk);
+    k = topk;
+
+    printf("Reading the file...\n");
+
     char *line[50];
     while (fgets(line, 50, input))
     {
         insert(convertRecord(line));
     }
-    int topk;
-    printf("Input value for K: ");
-    scanf("%d", &topk);
-    k = topk;
+    printf("Building the heap...\n");
     initHeap();
-
     readRecordNPut();
 
+    printf("Heap sort...\n");
+    heapSortK();
     // print heap content
     for (int i = 0; i < heap_size; i++)
     {
-        printf("[(%d) %ld : %ld]", i, heap[i]->timestamp, heap[i]->count);
+        printf("[(%d) %ld : %ld]\n", i, heap[i]->timestamp, heap[i]->count);
     }
 }
