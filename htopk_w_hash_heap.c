@@ -10,6 +10,7 @@
 #include <math.h>
 #include <time.h>
 
+#define NO_OF_THREAD 4
 #define HASH_TABLE_SIZE 1000
 
 /*
@@ -215,17 +216,9 @@ void readRecordNPut()
     }
 }
 
-// Function that round the timestamp to the nearest hour
-long convertRecord(char *timestamp)
-{
-    long decimal = strtol(timestamp, NULL, 10);
-    return decimal - decimal % 3600;
-}
-
 int total_threads = 0;
 char targetDir[20] = {0};
 long startDate = 0;
-int enrtyCount = 0;
 
 struct struct_readChunk_args {
 	FILE *file;
@@ -240,6 +233,23 @@ struct struct_readChunk_args {
 typedef struct struct_readChunk_args readChunk_args;
 
 // ----------------------------------------------------------------------------
+
+void parseEntry(char *str) {
+	char buffer[buf_size];
+	char delim[] = "\n ,";
+	strcpy(buffer, str);
+
+	char *ptr = strtok(buffer, delim);	// parsing entry
+
+	long timestamp = atoi(ptr);
+
+	if(timestamp < startDate) return;	// ignore timestamps less than startDate
+
+	long t = timestamp - timestamp % 3600;	// timestamp clipped to days
+
+	if(t >= start_idx)
+		insert(t);
+}
 
 void *readChunk(void *args) {
 	readChunk_args *actual_args = (readChunk_args*) args;
@@ -260,7 +270,7 @@ void *readChunk(void *args) {
 		read += strlen(buffer);
 
 		if(buffer[0] != '\n')
-			insert(convertRecord(buffer));
+			parseEntry(buffer);
 
 		memset(buffer, 0, buf_size);
 	}
@@ -324,16 +334,15 @@ void readDir() {
 }
 
 void displayResults() {
-	k = enrtyCount;
 	initHeap();
-	readRecordNPut();
+    readRecordNPut();
 	heapSortK();
 	
 	const char date_format[] = "%c";
 
 	printf("Top K frequently accessed hour:\n");
 
-	for (size_t i = 0; i < enrtyCount; i++)
+	for (size_t i = 0; i < k; i++)
 	{
 
 		time_t time_val = heap[i]->timestamp;
@@ -342,7 +351,7 @@ void displayResults() {
 		char buffer[80];
 		strftime(buffer, 80, date_format, time);
 
-		printf("%s\t%d\n", buffer, heap[i]->count);
+		printf("%s\t%ld\n", buffer, heap[i]->count);
 	}	
 }
 
@@ -351,6 +360,7 @@ void init() {
 	total_threads = get_nprocs() * 2;
 
 	targetDir[strcspn(targetDir, "/")] = 0;
+
 	initHashTable();
 }
 
@@ -358,7 +368,7 @@ int main(int argc, char **argv)
 {
 	strcpy(targetDir, argv[1]);
 	startDate = atoi(argv[2]);
-	enrtyCount = atoi(argv[3]);
+	k = atoi(argv[3]);
 
 	init();
 	readDir();
