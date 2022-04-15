@@ -139,27 +139,29 @@ void heapInsert(key_value *node)
 }
 
 // heapify function for Heap
-// This code doesn't work properly yet. Possible reason: I took the implemntation
-// of Max heap and modify it, but it is not implemented correctly
-
+// Reference: https://www.geeksforgeeks.org/min-heap-in-java/ (GeeksforGeeks)
 void heapify(int i)
 {
-    int min = i;
     key_value *temp;
-    if (2 * i + 1 < heap_size && smallerThan(heap[2 * i + 1],heap[min]))
+    if (i < (heap_size - 1) / 2)
     {
-        min = 2 * i + 1;
-    }
-    else if (2 * i + 2 < heap_size && smallerThan(heap[2 * i + 2],heap[min]))
-    {
-        min = 2 * i + 2;
-    }
-    if (min != i)
-    {
-        temp = heap[i];
-        heap[i] = heap[min];
-        heap[min] = temp;
-        heapify(min);
+        if (smallerThan(heap[2 * i + 1], heap[i]) || smallerThan(heap[2 * i + 2], heap[i]))
+        {
+            if (smallerThan(heap[2 * i + 1], heap[2 * i + 2]))
+            {
+                temp = heap[i];
+                heap[i] = heap[2 * i + 1];
+                heap[2 * i + 1] = temp;
+                heapify(2 * i + 1);
+            }
+            else
+            {
+                temp = heap[i];
+                heap[i] = heap[2 * i + 2];
+                heap[2 * i + 2] = temp;
+                heapify(2 * i + 2);
+            }
+        }
     }
 }
 
@@ -244,7 +246,7 @@ int main(int argc, char *argv[])
 
     printf("Heap sort...\n");
     heapSortK();
-    // print heap content
+    //  print heap content
     for (int i = 0; i < heap_size; i++)
     {
         printf("[(%d) %ld : %ld]\n", i, heap[i]->timestamp, heap[i]->count);
